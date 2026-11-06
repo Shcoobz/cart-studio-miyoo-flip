@@ -63,35 +63,10 @@ Then open <http://127.0.0.1:8765> in **Chrome or Edge**.
   only on a secure context. `http://127.0.0.1` and `http://localhost` count as secure;
   another machine's address over plain `http` does not.
 
-### GitHub Pages
-
-The page is static, so publishing `web/` (with `web/pkg/` in it) is enough. Note that the
-included `.github/workflows/pages.yml` rebuilds the WASM against upstream
-`BrandonKowalski/slot` at the commit in `slot.ref`, not against the Flip fork. To publish this
-copy as it is, deploy the committed `web/` folder instead, for example with a workflow that
-runs `actions/upload-pages-artifact` with `path: web` followed by `actions/deploy-pages`.
-
 ### Rebuilding the WASM
 
-`task build` runs:
-
-```sh
-wasm-pack build --release --target web --no-typescript --out-dir web/pkg
-```
-
-It needs the slot checkout beside this one (`../slot`), the Rust toolchain from
-`rust-toolchain.toml` (1.96 with the `wasm32-unknown-unknown` target) and wasm-pack. Without
-installing those locally, run it in Docker from the folder that holds both checkouts:
-
-```sh
-docker run --rm -v "$PWD":/w -w /w/slot-cart-studio rust:1-bookworm sh -c '
-  cargo install wasm-pack &&
-  wasm-pack build --release --target web --no-typescript --out-dir web/pkg &&
-  rm -f web/pkg/.gitignore'
-```
-
-wasm-pack writes a `.gitignore` containing `*` into `web/pkg/`; `task build` removes it so the
-built package can be committed. `task serve` builds and then serves `web/` as above.
+Only needed after changing the Rust code: `task build` (needs the slot-miyoo-flip checkout next
+to this one as `../slot`, Rust and wasm-pack).
 
 ## Licence
 
