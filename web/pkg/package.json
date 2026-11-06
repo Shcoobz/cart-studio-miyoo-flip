@@ -1,0 +1,14 @@
+{
+  "name": "slot-cart-studio",
+  "type": "module",
+  "version": "0.1.0",
+  "license": "GPL-3.0-or-later",
+  "files": [
+    "slot_cart_studio_bg.wasm",
+    "slot_cart_studio.js"
+  ],
+  "main": "slot_cart_studio.js",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

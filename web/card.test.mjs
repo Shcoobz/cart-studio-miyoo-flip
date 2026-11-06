@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fromDirectory, fromFiles } from './card.js';
+import { fromDirectory, fromFiles, labelKey, PLATFORMS } from './card.js';
 
 const notFound = () => Object.assign(new Error('not found'), { name: 'NotFoundError' });
 
@@ -178,9 +178,43 @@ test('a folder with files but no games is still not a slot card', () => {
 
 test('roms loose in Games ask to be moved into platform folders by hand', async () => {
   const loose = { Games: { 'A.gba': '' } };
-  const asks = { message: /Move them into the GBA, GB and GBC folders/ };
+  const asks = { message: /Move them into the GBA, GB, GBC, NES and SNES folders/ };
   await assert.rejects(fromDirectory(dirHandle(loose)), asks);
   assert.throws(() => fromFiles(listed(loose)), asks);
+});
+
+test('NES and SNES roms loose in Games ask to be moved too', async () => {
+  for (const name of ['A.nes', 'A.sfc', 'A.smc']) {
+    const loose = { Games: { [name]: '' } };
+    const asks = { message: /Move them into the GBA, GB, GBC, NES and SNES folders/ };
+    await assert.rejects(fromDirectory(dirHandle(loose)), asks);
+    assert.throws(() => fromFiles(listed(loose)), asks);
+  }
+});
+
+test('the shelves run newest first, the home consoles among the handhelds', () => {
+  assert.deepEqual(PLATFORMS, ['GBA', 'GBC', 'SNES', 'GB', 'NES']);
+});
+
+test('NES and SNES carts are read by slot’s extensions for their folder', async () => {
+  const tree = {
+    Games: {
+      NES: { 'Zelda.nes': '', 'Odd.sfc': '', 'Tetris.gb': '' },
+      SNES: { 'Mario World.sfc': '', 'F-Zero.SMC': '', 'Wrong.nes': '', '._Mario World.sfc': '' },
+    },
+    Labels: { NES: { 'Zelda.png': 'z' }, SNES: { 'F-Zero.png': 'f' } },
+  };
+  for (const card of [await fromDirectory(dirHandle(tree)), fromFiles(listed(tree))]) {
+    assert.deepEqual(
+      card.carts.map((c) => [c.platform, c.stem]),
+      [
+        ['SNES', 'F-Zero'],
+        ['SNES', 'Mario World'],
+        ['NES', 'Zelda'],
+      ],
+    );
+    assert.deepEqual([...card.labels.keys()].sort(), [labelKey('NES', 'Zelda'), labelKey('SNES', 'F-Zero')].sort());
+  }
 });
 
 test('a card without shell files reads as empty where the browser refuses .ini names', async () => {
@@ -196,4 +230,30 @@ test('a card without shell files reads as empty where the browser refuses .ini n
   });
   const source = await fromDirectory(windows(dirHandle({ ...GAMES, Config: {}, Labels: {} })));
   assert.deepEqual(await layers(source), { system: '', labels: '' });
+});
+
+test('carts one folder down are read as slot reads them, and no deeper', async () => {
+  const tree = {
+    Games: {
+      GBA: {
+        'Advance Wars.gba': '',
+        'Pokemon Hacks': { 'Lazarus.gba': '', 'notes.txt': '', Deeper: { 'Hidden.gba': '' } },
+        '.Trashes': { 'Gone.gba': '' },
+      },
+      GB: { Classics: { 'Tetris.gb': '' } },
+      NES: { Hacks: { 'Zelda Redux.nes': '' } },
+      SNES: { RPGs: { 'Chrono Trigger.sfc': '' }, 'Super Metroid.smc': '' },
+    },
+  };
+  for (const card of [await fromDirectory(dirHandle(tree)), fromFiles(listed(tree))]) {
+    const seen = card.carts.map((c) => [c.platform, c.stem, c.folder ?? null]);
+    assert.deepEqual(seen, [
+      ['GBA', 'Advance Wars', null],
+      ['GBA', 'Lazarus', 'Pokemon Hacks'],
+      ['SNES', 'Chrono Trigger', 'RPGs'],
+      ['SNES', 'Super Metroid', null],
+      ['GB', 'Tetris', 'Classics'],
+      ['NES', 'Zelda Redux', 'Hacks'],
+    ]);
+  }
 });

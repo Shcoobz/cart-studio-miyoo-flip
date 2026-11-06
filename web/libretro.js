@@ -13,6 +13,8 @@ const NAMES = {
   GBA: 'Nintendo - Game Boy Advance',
   GB: 'Nintendo - Game Boy',
   GBC: 'Nintendo - Game Boy Color',
+  NES: 'Nintendo - Nintendo Entertainment System',
+  SNES: 'Nintendo - Super Nintendo Entertainment System',
 };
 
 export async function fetchDat(platform) {

@@ -1,5 +1,5 @@
 /target
-/web/pkg
+!/web/pkg/
 /out
 # This repository is public. ScreenScraper credentials are read from the environment and nowhere
 # else, so anything shaped like a credentials file is refused by name rather than by memory.

@@ -58,6 +58,8 @@ tasks:
     desc: Build the WASM package into web/pkg
     cmds:
       - wasm-pack build --release --target web --no-typescript --out-dir web/pkg
+      # wasm-pack ignores its own output with a `*` .gitignore; web/pkg is committed here.
+      - rm -f web/pkg/.gitignore
 
   serve:
     desc: Serve web/ at http://127.0.0.1:8765

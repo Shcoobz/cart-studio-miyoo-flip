@@ -15,12 +15,39 @@ pub const H: u32 = 661;
 pub const GB_W: u32 = 1024;
 pub const GB_H: u32 = 901;
 
+/// The NES label, tall and narrow like its 122x204 well, and the SNES one, wide and flat like its
+/// 296x98 well. Each is about as many pixels as the GBA label, for the same reason as the Game
+/// Boy's size.
+pub const NES_W: u32 = 740;
+pub const NES_H: u32 = 1237;
+pub const SNES_W: u32 = 1640;
+pub const SNES_H: u32 = 543;
+
 /// The label a platform's well wants.
 pub fn size(platform: Platform) -> (u32, u32) {
     match platform {
         Platform::Gba => (W, H),
         Platform::Gb | Platform::Gbc => (GB_W, GB_H),
+        Platform::Nes => (NES_W, NES_H),
+        Platform::Snes => (SNES_W, SNES_H),
     }
+}
+
+/// The label well slot covers on a platform's cart, as slot itself measures it: its
+/// `label_size`, asked about a cart with no header. A Game Boy cart with no header is a notched
+/// pak, whose well is the one the Game Boy label is shaped for.
+pub fn well(platform: Platform) -> (u32, u32) {
+    slot_store::gb::with_header(&[], |rom| {
+        crate::cart::label_size(&slot_store::Cart {
+            platform,
+            stem: String::new(),
+            rom: rom.to_path_buf(),
+            label: None,
+            title: String::new(),
+            code: String::new(),
+            shell: None,
+        })
+    })
 }
 
 /// The logo's box, and where it sits, as fractions of the label rather than pixels of the GBA
@@ -83,13 +110,14 @@ pub fn pale_for(deep: [u8; 3]) -> [u8; 3] {
     hue::hsl_to_rgb(h, (s - 0.05).clamp(0.0, 1.0), (l + 0.22).clamp(0.0, 1.0))
 }
 
-/// Opaque RGBA between two corners. The gradient leans on x far more than y, so it reads as
-/// diagonal on a wide label.
+/// Opaque RGBA between two corners. The gradient leans on the label's long side far more than its
+/// short one, so it reads as diagonal on a wide label and on the tall NES label alike.
 pub fn gradient(lw: u32, lh: u32, deep: [u8; 3], pale: [u8; 3]) -> Vec<u8> {
+    let (along_x, along_y) = if lh > lw { (0.12, 0.88) } else { (0.88, 0.12) };
     let mut px = Vec::with_capacity((lw * lh * 4) as usize);
     for y in 0..lh {
         for x in 0..lw {
-            let t = 0.88 * x as f32 / lw as f32 + 0.12 * y as f32 / lh as f32;
+            let t = along_x * x as f32 / lw as f32 + along_y * y as f32 / lh as f32;
             for c in 0..3 {
                 px.push((deep[c] as f32 + (pale[c] as f32 - deep[c] as f32) * t).round() as u8);
             }
@@ -213,20 +241,21 @@ impl Band {
 }
 
 /// The part of a label slot shows, as x0, y0, x1, y1. slot covers its well with the label, so a
-/// label of another shape loses rows or columns.
+/// label of another shape loses rows or columns. The label's size says which platform it was made
+/// for; a size no platform makes is taken for the Game Boy's, as it always was.
 fn shown(lw: u32, lh: u32) -> (u32, u32, u32, u32) {
-    let (ww, wh) = if (lw, lh) == (W, H) {
-        (crate::cart::LABEL_W, crate::cart::LABEL_H)
-    } else {
-        (crate::cart::GB_LABEL_W, crate::cart::GB_LABEL_H)
-    };
-    let well = ww as f32 / wh as f32;
-    if lw as f32 / lh as f32 > well {
-        let vw = ((lh as f32 * well).round() as u32).min(lw);
+    let platform = Platform::ALL
+        .into_iter()
+        .find(|p| size(*p) == (lw, lh))
+        .unwrap_or(Platform::Gb);
+    let (ww, wh) = well(platform);
+    let aspect = ww as f32 / wh as f32;
+    if lw as f32 / lh as f32 > aspect {
+        let vw = ((lh as f32 * aspect).round() as u32).min(lw);
         let x0 = (lw - vw) / 2;
         (x0, 0, x0 + vw, lh)
     } else {
-        let vh = ((lw as f32 / well).round() as u32).min(lh);
+        let vh = ((lw as f32 / aspect).round() as u32).min(lh);
         let y0 = (lh - vh) / 2;
         (0, y0, lw, y0 + vh)
     }
@@ -619,6 +648,34 @@ mod tests {
             assert_eq!((info.width, info.height), want, "{platform:?}");
         }
     }
+    /// The NES and SNES labels are their wells' shapes too, as slot measures the wells.
+    #[test]
+    fn the_nes_and_snes_labels_are_the_shape_of_their_wells() {
+        for platform in [Platform::Gba, Platform::Gb, Platform::Nes, Platform::Snes] {
+            let (lw, lh) = size(platform);
+            let (ww, wh) = well(platform);
+            let (got, want) = (lw as f32 / lh as f32, ww as f32 / wh as f32);
+            assert!(
+                (got - want).abs() / want < 0.01,
+                "{platform:?}: {got} is not the well's {want}"
+            );
+        }
+        // Close enough on these two that slot shows every pixel.
+        for platform in [Platform::Nes, Platform::Snes] {
+            let (lw, lh) = size(platform);
+            assert_eq!(shown(lw, lh), (0, 0, lw, lh), "{platform:?}");
+        }
+    }
+
+    /// On the tall NES label the sweep runs down it rather than across it.
+    #[test]
+    fn the_tall_label_sweeps_down_its_length() {
+        let (deep, pale) = ([0, 0, 0], [200, 200, 200]);
+        let g = gradient(NES_W, NES_H, deep, pale);
+        let px = |x: u32, y: u32| g[((y * NES_W + x) * 4) as usize];
+        assert!(px(NES_W - 1, 0) < px(0, NES_H - 1));
+    }
+
     #[test]
     fn a_band_is_drawn_along_its_edge_and_the_logo_stays_off_it() {
         let (deep, pale) = ground_for(30);

@@ -12,6 +12,7 @@ import init, {
   layered_cart_shells,
   cart_size,
   clean_label,
+  crc_skip,
   existing_face,
   fallback_hue,
   header_code,
@@ -35,13 +36,17 @@ import { applyFill, autoFill, available, fillCounts, fillText, wears } from './l
 const $ = (id) => document.getElementById(id);
 const limit = limiter(4);
 // The GBA game code sits at 0xAC and the Game Boy header ends at 0x150; nothing past that is read.
+// NES and SNES carts take nothing from their header but how much of it the CRC leaves out.
 const HEAD = 0x150;
+// An iNES header's magic is its first 4 of 16 bytes, all crc_skip needs to see.
+const SKIP_HEAD = 16;
 const FATAL = 'The studio ran out of memory or hit an internal error. Reload the page to start again.';
 const BUILD = 'dev';
 
 // The box each platform's cart is drawn in, taken from slot at startup. A Game Boy Game Pak is
-// the same width as a GBA cart and nearly twice as tall, so a canvas cut for one refuses the
-// other's pixels outright rather than drawing them badly.
+// the same width as a GBA cart and nearly twice as tall, and the NES and SNES carts are shapes of
+// their own, so a canvas cut for one refuses another's pixels outright rather than drawing them
+// badly.
 const faceBox = new Map();
 const boxOf = (platform) => faceBox.get(platform) ?? faceBox.get('GBA');
 // One parsed No-Intro database per platform, kept across cards: the databases are large and a
@@ -68,7 +73,7 @@ function newCart({ platform, stem, file }) {
     stem,
     file,
     code: '',
-    // A Game Boy pak's header, which picks its shell and plastic. Empty on a GBA cart.
+    // A Game Boy pak's header, which picks its shell and plastic. Empty on every other cart.
     head: new Uint8Array(0),
     shell: '',
     shellOnCard: '',
@@ -531,16 +536,20 @@ async function open(source) {
   $('write-bar').hidden = true;
   $('fill-open').hidden = true;
   if (session.carts.length === 0) {
-    banner('There are no .gba files in that card’s Games folder.');
+    banner('There are no games in that card’s Games folder.');
     return;
   }
   loading('Reading the card…');
   track(identify(session));
 }
 
-async function crcOf(file) {
+// The CRC No-Intro files the rom under, which for NES leaves out the iNES header and for SNES a
+// copier header. crc_skip says how many leading bytes those are.
+async function crcOf(platform, file) {
+  const head = new Uint8Array(await file.slice(0, SKIP_HEAD).arrayBuffer());
+  const skip = crc_skip(platform, head, file.size);
   const crc = new Crc32();
-  const reader = file.stream().getReader();
+  const reader = file.slice(skip).stream().getReader();
   for (;;) {
     const { done, value } = await reader.read();
     if (done) return crc.finish();
@@ -582,9 +591,10 @@ async function identify(s) {
       const file = await c.file();
       const head = new Uint8Array(await file.slice(0, HEAD).arrayBuffer());
       // Only a GBA rom carries a game code. On a Game Boy cart 0xAC is inside the RST vectors,
-      // so a code read from there is opcode bytes dressed up as one.
+      // so a code read from there is opcode bytes dressed up as one. Only a Game Boy rom's
+      // header picks its pak; the NES and SNES carts have one shape each.
       c.code = c.platform === 'GBA' ? header_code(head) : '';
-      if (c.platform !== 'GBA') c.head = head;
+      if (c.platform === 'GB' || c.platform === 'GBC') c.head = head;
       const label = s.source.labels.get(labelKey(c.platform, c.stem));
       if (label) {
         const bytes = new Uint8Array(await (await label()).arrayBuffer());
@@ -593,7 +603,7 @@ async function identify(s) {
         c.existing = existing_face(bytes, c.platform, c.code, c.head, c.shell, c.stem);
         c.looking = false;
       } else {
-        c.crc = await crcOf(file);
+        c.crc = await crcOf(c.platform, file);
       }
     } catch (e) {
       if (trapped(e)) return;
@@ -611,7 +621,7 @@ async function identify(s) {
 
 async function match(s) {
   // One database per platform, fetched only for the platforms this card actually holds: a card
-  // of nothing but GBA carts never pays for the two Game Boy databases.
+  // of nothing but GBA carts never pays for the Game Boy, NES or SNES databases.
   for (const platform of new Set(s.carts.map((c) => c.platform))) {
     if (dats.has(platform)) continue;
     try {
@@ -667,6 +677,8 @@ function artKey(c) {
 
 // Fetch what `c.game` names and let it decide the cart's hue. The Game row re-runs this for a game
 // chosen by hand, so a chosen match is dressed exactly the way a matched one is.
+const TV_PLATFORMS = new Set(['NES', 'SNES']);
+
 async function dress(s, c) {
   // A set of our own is found by checksum, so a cart no database has a name for can still be
   // dressed from it. libretro is found by name, so those requests only happen when there is one.
@@ -681,7 +693,7 @@ async function dress(s, c) {
       : limit(async () =>
           s === session && !fatal ? fetchThumb(c.platform, folder, name, stub_target) : null,
         ).catch(noImage);
-  // Logos come from our own set alone, by checksum; libretro is asked only for box art.
+  // Logos come from our own set, by checksum; libretro is asked for box art (and NES/SNES logos).
   const ours = (media) => {
     const path = key && artIndex?.[key]?.[media];
     if (!path) return Promise.resolve(null);
@@ -693,7 +705,9 @@ async function dress(s, c) {
   // after the logo.
   const boxJob = thumb('Named_Boxarts');
   if (!c.logoBytes) {
-    const logo = await ours('wheel');
+    // Our set holds no NES or SNES logos; libretro's Named_Logos fills in for those two.
+    const logo =
+      (await ours('wheel')) ?? (TV_PLATFORMS.has(c.platform) ? await thumb('Named_Logos') : null);
     if (s !== session || fatal) return;
     c.logoBytes = logo && readable(logo) ? logo : null;
     // How bright the logo is decides which way its ground goes, so it is measured with the logo.
@@ -713,7 +727,14 @@ const platformsOf = (s) => PLATFORMS.filter((p) => s.carts.some((c) => c.platfor
 
 // A tab per platform on the card, with what it holds. One platform is no choice at all, so a
 // card of nothing but GBA carts shows no switcher and reads exactly as it did before.
-const PLATFORM_NAMES = { GBA: 'Game Boy Advance', GB: 'Game Boy', GBC: 'Game Boy Color' };
+// slot-store's Platform::name for each.
+const PLATFORM_NAMES = {
+  GBA: 'Game Boy Advance',
+  GB: 'Game Boy',
+  GBC: 'Game Boy Color',
+  NES: 'NES',
+  SNES: 'Super Nintendo',
+};
 
 function renderTabs() {
   const s = session;
@@ -991,7 +1012,7 @@ function shellOf(c) {
 async function lookUp(s, c) {
   paint(c);
   try {
-    if (c.crc === null) c.crc = await crcOf(await c.file());
+    if (c.crc === null) c.crc = await crcOf(c.platform, await c.file());
     if (!dats.has(c.platform)) dats.set(c.platform, Dat.parse(await fetchDat(c.platform)));
     if (s !== session || fatal) return;
     c.game = dats.get(c.platform).game_for(c.crc) ?? null;

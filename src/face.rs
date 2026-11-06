@@ -6,15 +6,15 @@ use slot_store::Platform;
 
 use crate::{art, cart};
 
-/// The platform a card folder names. It picks the GBA cart or a Game Boy pak; which pak, and
-/// its plastic, is the header's to say. Anything unrecognised is GBA, which is the folder the page falls back to
-/// as well.
+/// The platform a card folder names, as slot-store's `Platform::dir_name` spells it. It picks the
+/// GBA cart, a Game Boy pak, the NES cart or the SNES cart; which Game Boy pak, and its plastic,
+/// is the header's to say. Anything unrecognised is GBA, which is the folder the page falls back
+/// to as well.
 pub fn platform_of(dir: &str) -> Platform {
-    match dir {
-        "GB" => Platform::Gb,
-        "GBC" => Platform::Gbc,
-        _ => Platform::Gba,
-    }
+    Platform::ALL
+        .into_iter()
+        .find(|p| p.dir_name() == dir)
+        .unwrap_or(Platform::Gba)
 }
 
 /// Slot's `cart_face` reads a cart's label through `art::cover` and its pak's header through

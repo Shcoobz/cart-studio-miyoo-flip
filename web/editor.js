@@ -175,7 +175,8 @@ export function createEditor(api) {
     $('ed-shell-custom').value = `#${shell.colour}`;
     press('ed-finish', shell.finish);
     enable('ed-finish', shells && !shell.auto);
-    $('ed-outline-row').hidden = c.platform === 'GBA';
+    // Only a Game Boy pak comes in two outlines; the GBA, NES and SNES carts have one each.
+    $('ed-outline-row').hidden = c.platform !== 'GB' && c.platform !== 'GBC';
     press('ed-outline', shell.outline);
     enable('ed-outline', shells);
 

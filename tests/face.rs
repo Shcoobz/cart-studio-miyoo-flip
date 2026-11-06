@@ -15,8 +15,8 @@ const PLAIN: &str = "AMTE";
 const STEM: &str = "Probe Cart (USA)";
 
 /// A card in the shape slot reads now: every file under the folder its platform names. `dir` is
-/// that folder, `GBA` or `GB`, which is also how the studio names a platform across the wasm
-/// boundary.
+/// that folder, `GBA`, `GB`, `GBC`, `NES` or `SNES`, which is also how the studio names a
+/// platform across the wasm boundary.
 /// A Game Boy header: title, the code at 0x13F, CGB flag, and whether it was sold in Japan.
 type Gb = (&'static [u8], &'static [u8], u8, bool);
 const NO_GB: Gb = (b"", b"", 0, false);
@@ -35,7 +35,10 @@ fn card(dir: &str, code: &str, (title, gb_code, cgb, japan): Gb, label: &[u8]) -
     rom[0x13f..0x13f + gb_code.len()].copy_from_slice(gb_code);
     rom[0x143] = cgb;
     rom[0x14a] = u8::from(!japan);
-    let ext = dir.to_lowercase();
+    let ext = match dir {
+        "SNES" => "sfc".to_string(),
+        _ => dir.to_lowercase(),
+    };
     std::fs::write(d.path().join(format!("Games/{dir}/{STEM}.{ext}")), rom).expect("rom");
     std::fs::write(d.path().join(format!("Labels/{dir}/{STEM}.png")), label).expect("label");
     d
@@ -106,6 +109,9 @@ fn assert_same_as_slot(label: &[u8]) {
         ("GBC", "", (b"PM_CRYSTAL", b"BYTE", 0xc0, false)),
         ("GB", "", (b"POKEMON RED", b"", 0x00, false)),
         ("GB", "", (b"POKEMON RED", b"", 0x00, true)),
+        // The home consoles' carts have one shape each, whatever the rom's bytes say.
+        ("NES", "", NO_GB),
+        ("SNES", "", NO_GB),
     ] {
         let d = card(dir, code, gb, label);
         let (want, read_code, stem) = slot_face(d.path());
@@ -205,6 +211,8 @@ fn a_chosen_shell_matches_slot() {
         ("GBC", "", (b"", b"", 0xc0, false), "notched 123456 glitter"),
         ("GBA", EMERALD, NO_GB, "auto c0282c solid"),
         ("GBA", PLAIN, NO_GB, "rounded 2b3a88 clear"),
+        ("NES", "", NO_GB, "auto 8a1c1c solid"),
+        ("SNES", "", NO_GB, "notched 5a3d8a clear"),
     ] {
         let d = card(dir, code, gb, &label);
         let shells = d.path().join(slot_store::CART_SHELL_FILE);

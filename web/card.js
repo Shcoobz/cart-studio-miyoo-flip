@@ -4,13 +4,20 @@
 
 // slot files a cart under the folder its platform names, in Games/, Labels/, Saves/ and States/
 // alike, and the folder is what decides the platform: the rom is never opened to ask.
-// Listed newest first, which is the order the studio's shelves and tabs run in.
-export const PLATFORMS = ['GBA', 'GBC', 'GB'];
+// Listed newest first, which is the order the studio's shelves and tabs run in: GBA 2001, GBC
+// 1998, SNES 1990, GB 1989, NES 1983.
+export const PLATFORMS = ['GBA', 'GBC', 'SNES', 'GB', 'NES'];
 
 // slot's own rule, from slot-store's platform.rs. A .gba under GB/ is not a Game Boy cart and is
 // passed over in silence, the way slot passes over it.
-const EXTENSIONS = { GBA: ['gba'], GB: ['gb', 'gbc'], GBC: ['gb', 'gbc'] };
-const ANY_ROM = ['gba', 'gb', 'gbc'];
+const EXTENSIONS = {
+  GBA: ['gba'],
+  GB: ['gb', 'gbc'],
+  GBC: ['gb', 'gbc'],
+  NES: ['nes'],
+  SNES: ['sfc', 'smc'],
+};
+const ANY_ROM = [...new Set(Object.values(EXTENSIONS).flat())];
 
 const named = (dir) => PLATFORMS.find((p) => p === dir.toUpperCase());
 const ext = (name) => name.slice(name.lastIndexOf('.') + 1).toLowerCase();
@@ -41,7 +48,7 @@ const UNREADABLE =
 const OLD_SHELL_FILE =
   'This browser can’t open cart_shell.ini. Start the latest slot once, then choose the card again.';
 const OLD_LAYOUT =
-  'This card keeps its roms loose in Games, where slot doesn’t look. Move them into the GBA, GB and GBC folders inside Games, then choose the card again.';
+  'This card keeps its roms loose in Games, where slot doesn’t look. Move them into the GBA, GB, GBC, NES and SNES folders inside Games, then choose the card again.';
 
 export async function fromDirectory(root) {
   let games;
@@ -63,6 +70,14 @@ export async function fromDirectory(root) {
     for await (const [file, fh] of handle.entries()) {
       if (fh.kind === 'file' && isCart(platform, file)) {
         carts.push({ platform, stem: stemOf(file), file: () => fh.getFile() });
+      } else if (fh.kind === 'directory' && visible(file)) {
+        // One level of folders, as slot reads them: Games/GBA/Pokemon Hacks/*.gba. A folder
+        // groups carts on the shelf only; its carts keep their labels flat in Labels/GBA.
+        for await (const [inner, ih] of fh.entries()) {
+          if (ih.kind === 'file' && isCart(platform, inner)) {
+            carts.push({ platform, stem: stemOf(inner), folder: file, file: () => ih.getFile() });
+          }
+        }
       }
     }
   }
@@ -187,6 +202,16 @@ export function fromFiles(files) {
       const ext = ['cart_shell.txt', 'cart_shell.ini'].indexOf(name.toLowerCase());
       if (['config', 'system', 'labels'].includes(dir.toLowerCase()) && ext !== -1) {
         (shellFiles[dir.toLowerCase()] ??= [])[ext] = file;
+      }
+      continue;
+    }
+    // A cart one folder down, Games/GBA/Pokemon Hacks/x.gba, as slot reads it.
+    if (parts.length === 5 && parts[1].toLowerCase() === 'games' && visible(parts[3])) {
+      const [, , system, group, name] = parts;
+      const platform = named(system);
+      if (platform && isCart(platform, name)) {
+        sawPlatform = true;
+        carts.push({ platform, stem: stemOf(name), folder: group, file: async () => file });
       }
       continue;
     }

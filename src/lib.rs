@@ -38,8 +38,9 @@ pub mod zip;
 use wasm_bindgen::prelude::*;
 
 /// The cart face's size for a platform, `[w, h]`, so the page sizes its canvases from slot. A
-/// Game Boy Game Pak is the same width as a GBA cart and nearly twice as tall, so one size cannot
-/// serve both: a canvas cut for the wrong one refuses the pixels outright.
+/// Game Boy Game Pak is the same width as a GBA cart and nearly twice as tall, and the NES and SNES
+/// carts are shapes of their own, so one size cannot serve them all: a canvas cut for the wrong
+/// one refuses the pixels outright.
 #[wasm_bindgen]
 pub fn cart_size(platform: &str) -> Vec<u32> {
     let (w, h) = cart::cart_box(face::platform_of(platform));
@@ -47,8 +48,9 @@ pub fn cart_size(platform: &str) -> Vec<u32> {
 }
 
 /// A label the card already has, on its cart. `platform` is the card folder the rom sits in,
-/// `GBA`, `GB` or `GBC`, which is how the page names a platform either side of the wasm boundary.
-/// `head` is a Game Boy rom's first 0x150 bytes, which pick its pak; a GBA cart passes none.
+/// `GBA`, `GB`, `GBC`, `NES` or `SNES`, which is how the page names a platform either side of the
+/// wasm boundary. `head` is a Game Boy rom's first 0x150 bytes, which pick its pak; every other
+/// cart passes none.
 /// `shell` is the cart's value, empty for Automatic.
 #[wasm_bindgen]
 pub fn existing_face(
@@ -111,9 +113,18 @@ impl JsDat {
     }
 }
 
+/// A GBA rom's game code. Only GBA carts carry one; the page asks for no other platform's.
 #[wasm_bindgen]
 pub fn header_code(head: &[u8]) -> String {
     rom::header_code(head)
+}
+
+/// How many leading bytes the page leaves out of a rom's CRC, so it matches No-Intro's: an NES
+/// rom's iNES header, a SNES rom's copier header. `head` is the rom's first bytes, `size` its
+/// length in bytes.
+#[wasm_bindgen]
+pub fn crc_skip(platform: &str, head: &[u8], size: f64) -> u32 {
+    rom::crc_skip(face::platform_of(platform), head, size.max(0.0) as u64)
 }
 
 #[wasm_bindgen]

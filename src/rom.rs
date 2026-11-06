@@ -1,6 +1,27 @@
 //! What the page needs from a ROM's bytes: its game code, for the shell colour, and its CRC32,
 //! to find it in the No-Intro DAT.
 
+use slot_store::Platform;
+
+/// The iNES / NES 2.0 header: 16 bytes starting `NES\x1a`.
+const INES_MAGIC: [u8; 4] = *b"NES\x1a";
+const INES_LEN: u32 = 16;
+/// A copier's header in front of a SNES rom: 512 bytes, there when the size is 512 past a
+/// multiple of 1 KiB, since every real SNES rom is a whole number of KiB.
+const COPIER_LEN: u32 = 512;
+
+/// How many bytes at the front of a rom the No-Intro CRC leaves out. No-Intro hashes the NES rom
+/// without its 16-byte iNES header (libretro's DAT lists that dump as the `.unh` beside the
+/// headered `.nes`, so the headerless CRC matches whatever header a dumper wrote) and the SNES
+/// rom without a copier header. `head` is the rom's first bytes and `size` its length.
+pub fn crc_skip(platform: Platform, head: &[u8], size: u64) -> u32 {
+    match platform {
+        Platform::Nes if head.starts_with(&INES_MAGIC) && size > u64::from(INES_LEN) => INES_LEN,
+        Platform::Snes if size % 1024 == u64::from(COPIER_LEN) => COPIER_LEN,
+        _ => 0,
+    }
+}
+
 /// The four character game code at 0xAC, read the way `slot_store::gba` reads it: up to the
 /// first NUL, trimmed, and empty when there's nothing there. A cart then gets the same shell it
 /// gets on the device.
@@ -53,6 +74,24 @@ mod tests {
             parts.update(chunk);
         }
         assert_eq!(whole.finish(), parts.finish());
+    }
+
+    #[test]
+    fn an_ines_header_is_left_out_of_the_crc() {
+        let mut head = vec![0u8; 0x150];
+        head[..4].copy_from_slice(b"NES\x1a");
+        assert_eq!(crc_skip(Platform::Nes, &head, 40976), 16);
+        // No magic, no header: a headerless .nes is hashed whole.
+        assert_eq!(crc_skip(Platform::Nes, &[0u8; 0x150], 40960), 0);
+        // The magic means nothing on another platform.
+        assert_eq!(crc_skip(Platform::Gb, &head, 40976), 0);
+    }
+
+    #[test]
+    fn a_snes_copier_header_is_left_out_of_the_crc() {
+        assert_eq!(crc_skip(Platform::Snes, &[], 1_048_576 + 512), 512);
+        assert_eq!(crc_skip(Platform::Snes, &[], 1_048_576), 0);
+        assert_eq!(crc_skip(Platform::Gba, &[], 1_048_576 + 512), 0);
     }
 
     #[test]
