@@ -1,13 +1,33 @@
-# slot cart studio — Miyoo Flip fork
+# Cart Studio for slot on the Miyoo Flip
 
-> [!IMPORTANT]
-> **This is a fork of [cart-studio-web](https://github.com/slot-cfw/cart-studio-web) made to work
-> with [slot-miyoo-flip](https://github.com/Shcoobz/slot-miyoo-flip)**, the Miyoo Flip port of
-> slot. It reads cards the way that fork does: one level of game folders, and NES and SNES next
-> to GB, GBC and GBA. For the original RG SP slot, use the upstream studio.
+A fork of **[cart-studio-web](https://github.com/slot-cfw/cart-studio-web)**, the label maker
+for [slot](https://slot-cfw.fyi) cards: it makes cart labels in the browser and previews them on
+the same cart face the frontend draws. The original runs at
+[studio.slot-cfw.fyi](https://studio.slot-cfw.fyi) and is made for slot on the Anbernic RG SP.
 
-Cart labels for a [slot](https://slot-cfw.fyi) SD card, previewed on the same cart face the
-frontend draws. Runs in the browser at [studio.slot-cfw.fyi](https://studio.slot-cfw.fyi).
+This fork is made for **[slot-miyoo-flip](https://github.com/Shcoobz/slot-miyoo-flip)**, the
+Miyoo Flip port of slot, and reads cards the way that port does. This page covers only what is
+different here.
+
+## What this fork changes
+
+- **NES and SNES.** Two new platforms next to GBA, GBC and GB, each with its own shelf and tab
+  (`Games/NES`, `Games/SNES`, `Labels/NES`, `Labels/SNES`).
+- **Label shapes for the new carts.** A tall, narrow NES label and a wide, flat SNES label,
+  sized to the label wells slot itself draws. The colour gradient runs along the label's long
+  side, so it works on the tall NES label too.
+- **Matching NES and SNES roms.** The CRC leaves out an NES rom's 16-byte iNES header and a
+  SNES rom's 512-byte copier header, the way No-Intro hashes them, so headered dumps are still
+  found in libretro's database.
+- **Logos for NES and SNES** come from libretro's Named_Logos, since the studio's own logo set
+  has only Game Boy and GBA.
+- **One level of game folders**, as slot-miyoo-flip reads them:
+  `Games/GBA/Pokemon Hacks/x.gba`. Folders only group carts on the shelf; labels stay flat in
+  `Labels/GBA`.
+- **Small print and outlines:** NES and SNES carts print no product code (their headers carry
+  none), and only a Game Boy pak offers two outlines.
+- **Runs without building.** The compiled WASM in `web/pkg/` is committed, so serving `web/`
+  is enough (see below).
 
 ## Platforms
 
@@ -73,7 +93,7 @@ docker run --rm -v "$PWD":/w -w /w/slot-cart-studio rust:1-bookworm sh -c '
 wasm-pack writes a `.gitignore` containing `*` into `web/pkg/`; `task build` removes it so the
 built package can be committed. `task serve` builds and then serves `web/` as above.
 
-## License
+## Licence
 
 GPL-3.0-or-later, same as slot. See [LICENSE](LICENSE).
 
@@ -81,4 +101,5 @@ Game names and CRCs come from
 [libretro-database](https://github.com/libretro/libretro-database) (CC BY-SA 4.0); logos come
 from [ScreenScraper](https://www.screenscraper.fr/) (CC BY-NC-SA 4.0). 
 
-Game Boy, NES and Super Nintendo are trademarks of Nintendo. Not affiliated with Nintendo.
+Game Boy, NES and Super Nintendo are trademarks of Nintendo. Not affiliated with Nintendo, Miyoo,
+Anbernic or the original slot project.
