@@ -1,10 +1,13 @@
-# slot cart studio
+# slot cart studio — Miyoo Flip fork
+
+> [!IMPORTANT]
+> **This is a fork of [cart-studio-web](https://github.com/slot-cfw/cart-studio-web) made to work
+> with [slot-miyoo-flip](https://github.com/Shcoobz/slot-miyoo-flip)**, the Miyoo Flip port of
+> slot. It reads cards the way that fork does: one level of game folders, and NES and SNES next
+> to GB, GBC and GBA. For the original RG SP slot, use the upstream studio.
 
 Cart labels for a [slot](https://slot-cfw.fyi) SD card, previewed on the same cart face the
 frontend draws. Runs in the browser at [studio.slot-cfw.fyi](https://studio.slot-cfw.fyi).
-
-This copy sits beside the Miyoo Flip fork of slot and reads cards the way that fork does,
-including one level of game folders (`Games/GBA/Pokemon Hacks/x.gba`).
 
 ## Platforms
 
